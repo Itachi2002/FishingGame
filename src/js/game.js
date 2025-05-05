@@ -86,20 +86,61 @@ class Dobber extends Actor {
             y: 200,
             width: 15,
             height: 15,
-            collisionType: CollisionType.Passive // Start als Passive
+            collisionType: CollisionType.Passive
         })
         this.isUnderwater = false
         this.canCatch = false
         this.sprite = Resources.Dobber.toSprite()
         this.sprite.scale = { x: 0.1, y: 0.1 }
         this.graphics.use(this.sprite)
+        this._lastCollided = null
+        this.underwaterTimer = null
+        this.catchTimeLimit = 1000 // 1 second to catch
     }
+
     update(engine, delta) {
         super.update(engine, delta)
-        // CollisionType aanpassen
         this.collisionType = this.isUnderwater ? CollisionType.Active : CollisionType.Passive
+
         if (!this.isUnderwater) {
             this.sprite.opacity = 1
+            const overlap = engine.currentScene.actors.find(actor =>
+                ((actor instanceof Fish || actor instanceof Trash) && actor.isShadow && isOverlap(this, actor))
+            )
+            if (overlap) {
+                this.isUnderwater = true
+                this.sprite.opacity = 0.3
+                this.canCatch = true
+                overlap.stopped = true
+                this._lastCollided = overlap
+                
+                // Start timer when going underwater
+                if (this.underwaterTimer) clearTimeout(this.underwaterTimer)
+                this.underwaterTimer = setTimeout(() => {
+                    if (this.isUnderwater) {
+                        this.isUnderwater = false
+                        this.canCatch = false
+                        this.sprite.opacity = 1
+                        engine.ui.showFeedback('Te laat!')
+                        
+                        // Make the fish/trash disappear
+                        if (this._lastCollided) {
+                            if (this._lastCollided instanceof Fish) {
+                                engine.ui.showFeedback('Vis ontsnapt!')
+                                setTimeout(() => engine.spawnFish(), 700)
+                            } else if (this._lastCollided instanceof Trash) {
+                                engine.ui.showFeedback('Trash gezonken!')
+                                setTimeout(() => engine.spawnTrash(), 700)
+                            }
+                            this._lastCollided.kill()
+                            this._lastCollided = null
+                        }
+                    }
+                }, this.catchTimeLimit)
+            } else {
+                this._lastCollided = null
+            }
+
             if (engine.input.keyboard.isHeld(Keys.Up)) {
                 this.pos.y = Math.max(30, this.pos.y - 5)
             }
@@ -112,21 +153,21 @@ class Dobber extends Actor {
             if (engine.input.keyboard.isHeld(Keys.Right)) {
                 this.pos.x = Math.min(engine.drawWidth - 30, this.pos.x + 5)
             }
-            if (engine.input.keyboard.wasPressed(Keys.Space)) {
-                this.isUnderwater = true
-                this.sprite.opacity = 0.3
-                this.canCatch = true
-            }
         } else {
             this.sprite.opacity = 0.3
             if (engine.input.keyboard.wasPressed(Keys.Space) && this.canCatch) {
+                clearTimeout(this.underwaterTimer)
                 this.emit('trycatch')
                 this.canCatch = false
             }
             if (!this.canCatch) {
+                if (this.underwaterTimer) clearTimeout(this.underwaterTimer)
                 setTimeout(() => {
                     this.isUnderwater = false
                     this.sprite.opacity = 1
+                    if (this._lastCollided && this._lastCollided.isShadow) {
+                        this._lastCollided.stopped = false
+                    }
                 }, 700)
             }
         }
@@ -186,6 +227,7 @@ class Player {
         this.game.ui.updateScore(this.score)
     }
     handleCatch() {
+        if (this.game.isGameOver) return
         // Check alle overlappingen op dit moment
         const fishOverlaps = this.game.currentScene.actors.filter(actor =>
             (actor instanceof Fish && actor.isShadow && isOverlap(this.dobber, actor))
@@ -198,14 +240,31 @@ class Player {
             fish.showRealFish()
             this.addPoints(fish.points)
             this.game.ui.showFeedback('Gevangen!')
+            setTimeout(() => this.game.spawnFish(), 700)
         } else if (trashOverlaps.length > 0) {
             const trash = trashOverlaps[0]
             trash.showRealTrash()
             this.addPoints(-trash.penalty)
+            this.game.trashCaught++
             this.game.ui.showFeedback('Trash gevangen!')
+            setTimeout(() => {
+                // Meer trash spawnen naarmate je score hoger is
+                const extra = Math.floor(this.score / 30)
+                for (let i = 0; i < 1 + extra; i++) this.game.spawnTrash()
+            }, 700)
+            if (this.game.trashCaught >= 3) {
+                this.gameOver()
+            }
         } else {
             this.game.ui.showFeedback('Mis!')
         }
+    }
+    gameOver() {
+        this.game.isGameOver = true
+        this.game.ui.showFeedback('GAME OVER!')
+        this.dobber.isUnderwater = false
+        this.dobber.canCatch = false
+        this.game.showRestartButton()
     }
 }
 
@@ -225,56 +284,110 @@ export class Game extends Engine {
             height: 720,
             maxFps: 60,
             displayMode: DisplayMode.FitScreen,
-            pixelRatio: 1 // Force pixel ratio to 1 to avoid WebGL issues
-        })
+            pixelRatio: 1
+         })
+        this.trashCaught = 0
+        this.isGameOver = false
+        this.restartButton = null
+        this.background = null
+        this.player = null
+        this.ui = null
         this.start(ResourceLoader).then(() => this.startGame())
     }
 
     startGame() {
-        console.log("Starting the game!")
-        
-        // Add background
-        const background = new Actor({
-            x: this.drawWidth / 2,
-            y: this.drawHeight / 2,
-            width: this.drawWidth,
-            height: this.drawHeight
-        })
-        background.graphics.use(Resources.Background.toSprite())
-        this.add(background)
-        
+        this.isGameOver = false
+        this.trashCaught = 0
+        // Verwijder alle actors behalve background
+        this.clearActors()
+        // Add background (maar maar één keer)
+        if (!this.background) {
+            this.background = new Actor({
+                x: this.drawWidth / 2,
+                y: this.drawHeight / 2,
+                width: this.drawWidth,
+                height: this.drawHeight
+            })
+            this.background.graphics.use(Resources.Background.toSprite())
+            this.add(this.background)
+        }
+        // Verwijder oude player en UI als ze bestaan
+        if (this.player) { this.player.dobber.kill(); this.player = null; }
+        if (this.ui) { this.ui.scoreLabel.kill(); this.ui.highScoreLabel.kill(); this.ui.feedbackLabel.kill(); this.ui = null; }
         // Initialize game objects
         this.player = new Player(this)
         this.ui = new UI(this)
-        
-        // Add initial fish and trash
-        const fishTypes = [
-            { shadow: Resources.ShadowFish1, real: Resources.Fish1, points: 10, minSpeed: 4, maxSpeed: 6 },
-            { shadow: Resources.ShadowFish2, real: Resources.Fish2, points: 20, minSpeed: 5, maxSpeed: 8 },
-            { shadow: Resources.ShadowRare, real: Resources.FishRare, points: 50, minSpeed: 6, maxSpeed: 10 }
-        ]
-        for (let i = 0; i < 7; i++) {
-            const type = fishTypes[Math.floor(Math.random() * fishTypes.length)]
-            const direction = Math.random() > 0.5 ? 1 : -1
-            const speed = Math.random() * (type.maxSpeed - type.minSpeed) + type.minSpeed
-            const y = Math.random() * (this.drawHeight - 60) + 30
-            const x = direction === 1 ? -50 : this.drawWidth + 50
-            const fish = new Fish(x, y, direction, speed, type.points, type.shadow, type.real)
-            this.add(fish)
+        // Start met 5 vissen en 2 trash
+        for (let i = 0; i < 5; i++) this.spawnFish()
+        for (let i = 0; i < 2; i++) this.spawnTrash()
+        // Verwijder restart button als die er is
+        if (this.restartButton) {
+            this.restartButton.kill()
+            this.restartButton = null
         }
-        // Trash
-        const trashTypes = [
-            { shadow: Resources.ShadowTrash, real: Resources.Trash, penalty: 10, minSpeed: 4, maxSpeed: 8 }
-        ]
-        for (let i = 0; i < 4; i++) {
-            const type = trashTypes[0]
-            const direction = Math.random() > 0.5 ? 1 : -1
-            const speed = Math.random() * (type.maxSpeed - type.minSpeed) + type.minSpeed
-            const y = Math.random() * (this.drawHeight - 60) + 30
-            const x = direction === 1 ? -50 : this.drawWidth + 50
-            const trash = new Trash(x, y, direction, speed, type.shadow, type.real, type.penalty)
-            this.add(trash)
+    }
+
+    spawnFish() {
+        if (this.isGameOver) return
+        // Zeldzame vis: 1 op 20 kans
+        const rareChance = Math.random()
+        let type
+        if (rareChance < 0.05) {
+            type = { shadow: Resources.ShadowRare, real: Resources.FishRare, points: 50, minSpeed: (6 + this.player.score/20)*2, maxSpeed: (10 + this.player.score/10)*2 }
+        } else if (Math.random() < 0.5) {
+            type = { shadow: Resources.ShadowFish1, real: Resources.Fish1, points: 10, minSpeed: (4 + this.player.score/30)*2, maxSpeed: (6 + this.player.score/15)*2 }
+        } else {
+            type = { shadow: Resources.ShadowFish2, real: Resources.Fish2, points: 20, minSpeed: (5 + this.player.score/25)*2, maxSpeed: (8 + this.player.score/12)*2 }
         }
+        const direction = Math.random() > 0.5 ? 1 : -1
+        const speed = Math.random() * (type.maxSpeed - type.minSpeed) + type.minSpeed
+        const y = Math.random() * (this.drawHeight - 60) + 30
+        const x = direction === 1 ? -50 : this.drawWidth + 50
+        const fish = new Fish(x, y, direction, speed, type.points, type.shadow, type.real)
+        fish.on('exitviewport', () => { this.remove(fish); this.spawnFish() })
+        this.add(fish)
+    }
+
+    spawnTrash() {
+        if (this.isGameOver) return
+        const type = { shadow: Resources.ShadowTrash, real: Resources.Trash, penalty: 10, minSpeed: (4 + this.player.score/20)*2, maxSpeed: (8 + this.player.score/10)*2 }
+        const direction = Math.random() > 0.5 ? 1 : -1
+        const speed = Math.random() * (type.maxSpeed - type.minSpeed) + type.minSpeed
+        const y = Math.random() * (this.drawHeight - 60) + 30
+        const x = direction === 1 ? -50 : this.drawWidth + 50
+        const trash = new Trash(x, y, direction, speed, type.shadow, type.real, type.penalty)
+        trash.on('exitviewport', () => { this.remove(trash); this.spawnTrash() })
+        this.add(trash)
+    }
+
+    // Helper om alle actors behalve background te verwijderen
+    clearActors() {
+        this.currentScene.actors.forEach(actor => {
+            if (actor !== this.background) {
+                actor.kill()
+            }
+        })
+    }
+
+    showRestartButton() {
+        if (this.restartButton) return
+        this.restartButton = new Actor({
+            x: this.drawWidth / 2,
+            y: this.drawHeight / 2 + 60,
+            width: 200,
+            height: 60,
+            color: Color.Azure
+        })
+        const label = new Label({
+            text: 'Restart',
+            pos: new Vector(this.drawWidth / 2 - 50, this.drawHeight / 2 + 50),
+            font: new Font({ size: 32, unit: FontUnit.Px, color: Color.Black })
+        })
+        this.restartButton.on('pointerup', () => {
+            this.startGame()
+        })
+        this.add(this.restartButton)
+        this.add(label)
     }
 }
 
