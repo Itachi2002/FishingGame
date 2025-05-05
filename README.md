@@ -1,25 +1,32 @@
-# Excalibur Startproject 2025
+# Fishing Game
 
-- Vanaf de HR repository: klik op ***USE THIS TEMPLATE***. Kies jouw eigen github account. 
-- Kopieer de `git url` van jouw eigen repository (dit vind je onder de "code" button).
-- Open VS Code. Klik op "file" en kies "clone repository".
-- Npm start Vite met een eigen webserver, dus sla het project NIET op in je XAMPP of HERD folder waar al een webserver draait.
-- Typ `npm install` en `npm run dev` in de terminal in VS Code.
-- Installeer de [Chrome Excalibur Debugger](https://chromewebstore.google.com/detail/excalibur-dev-tools/dinddaeielhddflijbbcmpefamfffekc)
-- [Bekijk het instructie filmpje!](https://youtu.be/UIVpe4L5_P4)
+A relaxing fishing game built with Excalibur.js where players can catch various types of fish in different locations. The game features a simple yet engaging gameplay loop that combines timing, skill, and a bit of luck.
 
-### Kies een resolutie
+## Game Features
 
-***widescreen 16/9***
-- 640 × 360
-- 800 x 450
-- 1280 x 720
+- Multiple fish species with different behaviors and rarity levels
+- Dynamic fishing mechanics with rod casting and reeling
+- Beautiful underwater environments
+- Score system and fish collection
+- Progressive difficulty as you catch more fish
 
-***retro 4/3***
-- 512 × 384
-- 640 × 480
-- 800 × 600
+## Technical Details
 
-### Bewerk deze readme file
+- Built with Excalibur.js game engine
+- Resolution: 1280 x 720 (16:9 widescreen)
+- Uses Vite for development and building
+- Chrome Excalibur Debugger for development
 
-Verwijder deze instructies, plaats hier een beschrijving van jouw game.
+## Development
+
+1. Clone the repository
+2. Run `npm install` to install dependencies
+3. Run `npm run dev` to start the development server
+4. Open your browser to the local development URL
+
+## Controls
+
+- Click and hold to cast the fishing rod
+- Release to start reeling
+- Time your clicks to keep the fish on the line
+- Collect different types of fish to increase your score
