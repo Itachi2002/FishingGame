@@ -95,7 +95,8 @@ class Dobber extends Actor {
         this.graphics.use(this.sprite)
         this._lastCollided = null
         this.underwaterTimer = null
-        this.catchTimeLimit = 1000 // 1 second to catch
+        this.catchTimeLimit = 800 // Reduced from 1000 to 800ms for more challenge
+        this.moveSpeed = 4 // Reduced from 5 to 4 for more precise control
     }
 
     update(engine, delta) {
@@ -142,16 +143,16 @@ class Dobber extends Actor {
             }
 
             if (engine.input.keyboard.isHeld(Keys.Up)) {
-                this.pos.y = Math.max(30, this.pos.y - 5)
+                this.pos.y = Math.max(30, this.pos.y - this.moveSpeed)
             }
             if (engine.input.keyboard.isHeld(Keys.Down)) {
-                this.pos.y = Math.min(engine.drawHeight - 30, this.pos.y + 5)
+                this.pos.y = Math.min(engine.drawHeight - 30, this.pos.y + this.moveSpeed)
             }
             if (engine.input.keyboard.isHeld(Keys.Left)) {
-                this.pos.x = Math.max(30, this.pos.x - 5)
+                this.pos.x = Math.max(30, this.pos.x - this.moveSpeed)
             }
             if (engine.input.keyboard.isHeld(Keys.Right)) {
-                this.pos.x = Math.min(engine.drawWidth - 30, this.pos.x + 5)
+                this.pos.x = Math.min(engine.drawWidth - 30, this.pos.x + this.moveSpeed)
             }
         } else {
             this.sprite.opacity = 0.3
@@ -247,11 +248,8 @@ class Player {
             this.addPoints(-trash.penalty)
             this.game.trashCaught++
             this.game.ui.showFeedback('Trash gevangen!')
-            setTimeout(() => {
-                // Meer trash spawnen naarmate je score hoger is
-                const extra = Math.floor(this.score / 30)
-                for (let i = 0; i < 1 + extra; i++) this.game.spawnTrash()
-            }, 700)
+            // Spawn only one trash item, but increase its speed based on score
+            setTimeout(() => this.game.spawnTrash(), 700)
             if (this.game.trashCaught >= 3) {
                 this.gameOver()
             }
@@ -296,35 +294,35 @@ export class Game extends Engine {
     }
 
     startGame() {
+        // First, remove all existing actors
+        this.currentScene.actors.forEach(actor => {
+            actor.kill()
+        })
+        
+        // Reset game state
         this.isGameOver = false
         this.trashCaught = 0
-        // Verwijder alle actors behalve background
-        this.clearActors()
-        // Add background (maar maar één keer)
-        if (!this.background) {
-            this.background = new Actor({
-                x: this.drawWidth / 2,
-                y: this.drawHeight / 2,
-                width: this.drawWidth,
-                height: this.drawHeight
-            })
-            this.background.graphics.use(Resources.Background.toSprite())
-            this.add(this.background)
-        }
-        // Verwijder oude player en UI als ze bestaan
-        if (this.player) { this.player.dobber.kill(); this.player = null; }
-        if (this.ui) { this.ui.scoreLabel.kill(); this.ui.highScoreLabel.kill(); this.ui.feedbackLabel.kill(); this.ui = null; }
-        // Initialize game objects
+        this.player = null
+        this.ui = null
+        this.restartButton = null
+        
+        // Create new background
+        this.background = new Actor({
+            x: this.drawWidth / 2,
+            y: this.drawHeight / 2,
+            width: this.drawWidth,
+            height: this.drawHeight
+        })
+        this.background.graphics.use(Resources.Background.toSprite())
+        this.add(this.background)
+        
+        // Create new player and UI
         this.player = new Player(this)
         this.ui = new UI(this)
-        // Start met 5 vissen en 2 trash
+        
+        // Spawn initial fish and trash
         for (let i = 0; i < 5; i++) this.spawnFish()
         for (let i = 0; i < 2; i++) this.spawnTrash()
-        // Verwijder restart button als die er is
-        if (this.restartButton) {
-            this.restartButton.kill()
-            this.restartButton = null
-        }
     }
 
     spawnFish() {
@@ -333,11 +331,18 @@ export class Game extends Engine {
         const rareChance = Math.random()
         let type
         if (rareChance < 0.05) {
-            type = { shadow: Resources.ShadowRare, real: Resources.FishRare, points: 50, minSpeed: (6 + this.player.score/20)*2, maxSpeed: (10 + this.player.score/10)*2 }
+            // Make rare fish much faster
+            type = { 
+                shadow: Resources.ShadowRare, 
+                real: Resources.FishRare, 
+                points: 50, 
+                minSpeed: (15 + this.player.score/10)*5, // Increased base speed
+                maxSpeed: (20 + this.player.score/5)*5  // Increased max speed
+            }
         } else if (Math.random() < 0.5) {
-            type = { shadow: Resources.ShadowFish1, real: Resources.Fish1, points: 10, minSpeed: (4 + this.player.score/30)*2, maxSpeed: (6 + this.player.score/15)*2 }
+            type = { shadow: Resources.ShadowFish1, real: Resources.Fish1, points: 10, minSpeed: (6 + this.player.score/25)*2, maxSpeed: (8 + this.player.score/12)*2 }
         } else {
-            type = { shadow: Resources.ShadowFish2, real: Resources.Fish2, points: 20, minSpeed: (5 + this.player.score/25)*2, maxSpeed: (8 + this.player.score/12)*2 }
+            type = { shadow: Resources.ShadowFish2, real: Resources.Fish2, points: 20, minSpeed: (7 + this.player.score/20)*2, maxSpeed: (10 + this.player.score/10)*2 }
         }
         const direction = Math.random() > 0.5 ? 1 : -1
         const speed = Math.random() * (type.maxSpeed - type.minSpeed) + type.minSpeed
@@ -350,7 +355,7 @@ export class Game extends Engine {
 
     spawnTrash() {
         if (this.isGameOver) return
-        const type = { shadow: Resources.ShadowTrash, real: Resources.Trash, penalty: 10, minSpeed: (4 + this.player.score/20)*2, maxSpeed: (8 + this.player.score/10)*2 }
+        const type = { shadow: Resources.ShadowTrash, real: Resources.Trash, penalty: 10, minSpeed: (6 + this.player.score/15)*2, maxSpeed: (10 + this.player.score/8)*2 }
         const direction = Math.random() > 0.5 ? 1 : -1
         const speed = Math.random() * (type.maxSpeed - type.minSpeed) + type.minSpeed
         const y = Math.random() * (this.drawHeight - 60) + 30
@@ -371,6 +376,18 @@ export class Game extends Engine {
 
     showRestartButton() {
         if (this.restartButton) return
+        
+        // Create a semi-transparent overlay
+        const overlay = new Actor({
+            x: this.drawWidth / 2,
+            y: this.drawHeight / 2,
+            width: this.drawWidth,
+            height: this.drawHeight,
+            color: new Color(0, 0, 0, 0.5)
+        })
+        this.add(overlay)
+        
+        // Create restart button
         this.restartButton = new Actor({
             x: this.drawWidth / 2,
             y: this.drawHeight / 2 + 60,
@@ -378,14 +395,27 @@ export class Game extends Engine {
             height: 60,
             color: Color.Azure
         })
+        
         const label = new Label({
             text: 'Restart',
             pos: new Vector(this.drawWidth / 2 - 50, this.drawHeight / 2 + 50),
             font: new Font({ size: 32, unit: FontUnit.Px, color: Color.Black })
         })
+        
+        // Add click handler with a small delay to ensure cleanup
         this.restartButton.on('pointerup', () => {
-            this.startGame()
+            // Remove UI elements first
+            overlay.kill()
+            this.restartButton.kill()
+            label.kill()
+            
+            // Small delay before restarting to ensure cleanup
+            setTimeout(() => {
+                this.restartButton = null
+                this.startGame()
+            }, 100)
         })
+        
         this.add(this.restartButton)
         this.add(label)
     }
