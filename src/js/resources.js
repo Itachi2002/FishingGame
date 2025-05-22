@@ -1,4 +1,4 @@
-import { ImageSource, Resource, Loader } from 'excalibur'
+import { ImageSource, Resource, Loader, Sound } from 'excalibur'
 
 // Game resources
 const Resources = {
@@ -11,7 +11,11 @@ const Resources = {
     Background: new ImageSource('images/background.png'),
     ShadowFish1: new ImageSource('images/shadow_fish1.png'),
     ShadowFish2: new ImageSource('images/shadow_fish2.png'),
-    ShadowRare: new ImageSource('images/shadow_rare.png')
+    ShadowRare: new ImageSource('images/shadow_rare.png'),
+    // Sound resources
+    DobberSplash: new Sound('sounds/dobbersplash.wav'),
+    FishCaught: new Sound('sounds/fishcaught.wav'),
+    TrashSound: new Sound('sounds/trash.wav')
 }
 
 const ResourceLoader = new Loader()

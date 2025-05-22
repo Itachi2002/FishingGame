@@ -114,7 +114,6 @@ class Dobber extends Actor {
                 this.canCatch = true
                 overlap.stopped = true
                 this._lastCollided = overlap
-                
                 // Start timer when going underwater
                 if (this.underwaterTimer) clearTimeout(this.underwaterTimer)
                 this.underwaterTimer = setTimeout(() => {
@@ -123,7 +122,6 @@ class Dobber extends Actor {
                         this.canCatch = false
                         this.sprite.opacity = 1
                         engine.ui.showFeedback('Te laat!')
-                        
                         // Make the fish/trash disappear
                         if (this._lastCollided) {
                             if (this._lastCollided instanceof Fish) {
@@ -195,10 +193,68 @@ class UI {
             pos: new Vector(game.drawWidth / 2 - 60, 100),
             font: new Font({ size: 32, unit: FontUnit.Px, color: Color.Yellow })
         })
+        
+        // Create lives container with background
+        this.livesContainer = new Actor({
+            x: game.drawWidth -250,
+            y: 50,
+            width: 180,
+            height: 50
+        })
+        
+        // Add semi-transparent background to lives container
+        const livesBg = new Actor({
+            x: 65,
+            y: 0,
+            width: 300,
+            height: 50,
+            color: new Color(0, 0, 0, 0.5)
+        })
+        this.livesContainer.addChild(livesBg)
+        
+        // Add "Lives:" label
+        const livesLabel = new Label({
+            text: 'Lives:',
+            pos: new Vector(-70, -15),
+            font: new Font({ size: 30, unit: FontUnit.Px, color: Color.White })
+        })
+        this.livesContainer.addChild(livesLabel)
+        
+        // Create trash icons for lives
+        this.lives = []
+        this.maxLives = 3
+        this.updateLives(this.maxLives)
+        
         game.add(this.scoreLabel)
         game.add(this.highScoreLabel)
         game.add(this.feedbackLabel)
+        game.add(this.livesContainer)
     }
+    
+    updateLives(currentLives) {
+        // Remove old lives
+        this.lives.forEach(life => life.kill())
+        this.lives = []
+        
+        // Place trash icons to the right of the label, with less spacing
+        const startX = 60; // Start after the label
+        for (let i = 0; i < this.maxLives; i++) {
+            const trashSprite = Resources.Trash.toSprite()
+            trashSprite.scale = { x: 0.07, y: 0.07 }
+            trashSprite.opacity = i < currentLives ? 1 : 0.3
+            
+            const trashIcon = new Actor({
+                x: startX + (i * 60), // Less spacing between icons
+                y: 0,
+                width: 32,
+                height: 32
+            })
+            trashIcon.graphics.use(trashSprite)
+            this.livesContainer.addChild(trashIcon)
+            this.lives.push(trashIcon)
+        }
+    }
+    
     updateScore(score) {
         if (score > this.highScore) {
             this.highScore = score
@@ -207,6 +263,7 @@ class UI {
         this.scoreLabel.text = `Score: ${score}`
         this.highScoreLabel.text = `High Score: ${this.highScore}`
     }
+    
     showFeedback(text) {
         this.feedbackLabel.text = text
         setTimeout(() => { this.feedbackLabel.text = '' }, 900)
@@ -219,6 +276,7 @@ class Player {
         this.dobber = new Dobber()
         this.score = 0
         this.game = game
+        this.lives = 3
         game.add(this.dobber)
         this.dobber.on('trycatch', () => this.handleCatch())
     }
@@ -241,16 +299,19 @@ class Player {
             fish.showRealFish()
             this.addPoints(fish.points)
             this.game.ui.showFeedback('Gevangen!')
+            Resources.FishCaught.play()
             setTimeout(() => this.game.spawnFish(), 700)
         } else if (trashOverlaps.length > 0) {
             const trash = trashOverlaps[0]
             trash.showRealTrash()
+            this.lives--
+            this.game.ui.updateLives(this.lives)
             this.addPoints(-trash.penalty)
             this.game.trashCaught++
             this.game.ui.showFeedback('Trash gevangen!')
-            // Spawn only one trash item, but increase its speed based on score
+            Resources.TrashSound.play()
             setTimeout(() => this.game.spawnTrash(), 700)
-            if (this.game.trashCaught >= 3) {
+            if (this.lives <= 0) {
                 this.gameOver()
             }
         } else {
