@@ -40,3 +40,90 @@ Een complete Excalibur.js visgame waarin je met een dobber vissen en afval uit h
 - Zet GitHub Pages aan op de `main` branch, root `/docs` map
 
 Veel visplezier! 🐟
+
+## Class Diagram
+```
++------------------------+       +------------------------+
+|         Actor          |       |         Engine         |
++------------------------+       +------------------------+
+| +x: number             |       | +width: number         |
+| +y: number             |       | +height: number        |
+| +width: number         |       | +maxFps: number        |
+| +height: number        |       | +isGameOver: boolean   |
+| +vel: Vector           |       | +trashCaught: number   |
+| +pos: Vector           |       | +player: Player        |
+| +graphics: any         |       | +ui: UI                |
+| +update()              |       | +startGame()           |
+| +kill()                |       | +spawnFish()           |
++------------------------+       | +spawnTrash()          |
+                ^                +------------------------+
+                |                          ^
+                |                          |
++------------------------+       +------------------------+
+|         Shadow         |       |         Player         |
++------------------------+       +------------------------+
+| +speed: number         |       | -dobber: Dobber        |
+| +direction: number     |       | -score: number         |
+| +time: number          |       | -lives: number         |
+| +stopped: boolean      |       | +getScore()            |
+| +update()              |       | +addPoints()           |
++------------------------+       | +handleCatch()         |
+                ^                | +gameOver()            |
+                |                +------------------------+
+        +-------+-------+
+        |               |
++---------------+  +----------------+  +------------------------+
+|     Fish      |  |     Trash      |  |         Dobber         |
++---------------+  +----------------+  +------------------------+
+| +points: num  |  | +penalty: num  |  | -isUnderwater: boolean |
+| +isShadow: b  |  | +isShadow: b   |  | -canCatch: boolean     |
+| +showReal()   |  | +showReal()    |  | -_lastCollided: any    |
++---------------+  +----------------+  | -underwaterTimer: any  |
+                                      | -catchTimeLimit: number |
+                                      | +update()               |
+                                      +------------------------+
+
++------------------------+
+|          UI            |
++------------------------+
+| -highScore: number     |
+| -scoreLabel: Label     |
+| -highScoreLabel: Label |
+| -feedbackLabel: Label  |
+| -livesContainer: Actor |
+| -lives: Array<Actor>   |
+| +updateScore()         |
+| +updateLives()         |
+| +showFeedback()        |
++------------------------+
+
+Legenda:
++ = public property/method
+- = private property/method
+^ = inheritance
+-> = composition
+```
+
+### Relaties in het Class Diagram
+
+1. **Inheritance (Overerving)**:
+   - `Shadow` erft over van `Actor`
+   - `Fish` en `Trash` erven over van `Shadow`
+   - `Dobber` erft over van `Actor`
+
+2. **Composition (Compositie)**:
+   - `Player` heeft een `Dobber` (composition)
+   - `Game` heeft een `Player` en `UI` (composition)
+
+3. **Properties en Methods**:
+   - Public properties/methods zijn gemarkeerd met `+`
+   - Private properties/methods zijn gemarkeerd met `-`
+
+4. **Belangrijke Classes**:
+   - `Actor`: Basis class van Excalibur.js
+   - `Shadow`: Basis class voor alle onderwater objecten
+   - `Fish` en `Trash`: Specifieke objecten die overerven van Shadow
+   - `Player`: Beheert de speler logica en score
+   - `Dobber`: Beheert de dobber beweging en interactie
+   - `UI`: Beheert de gebruikersinterface
+   - `Game`: Hoofdclass die alles coördineert
